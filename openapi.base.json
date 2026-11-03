@@ -1,0 +1,1851 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CSE HitDad - Football Club Management API",
+    "version": "1.2.4",
+    "description": "\nTài liệu RESTful API chính thức của hệ thống quản lý câu lạc bộ bóng đá **CSE HitDad**.\n\nTài liệu này bao gồm 2 API Collections trọng tâm:\n1. **User Collection**: Quản lý thành viên CLB, hồ sơ cá nhân, đổi mật khẩu, upload/xóa avatar, mã VietQR cá nhân và quy trình Ban Cán Sự duyệt đơn gia nhập CLB.\n2. **Payment Collection**: Quản lý thu chi tiền sân, đối soát thanh toán PayOS VietQR tự động theo thời gian thực và Webhook xử lý giao dịch.\n\n---\n### Hướng dẫn Xác thực (Authentication)\nĐa số các endpoint yêu cầu gửi JWT Access Token trong HTTP Request Header:\n```http\nAuthorization: Bearer <your_access_token>\n```\n- Quyền **MEMBER**: Được truy cập các thông tin cá nhân và thanh toán liên quan đến chính mình.\n- Quyền **ADMIN**: Ban Cán Sự có toàn quyền phê duyệt thành viên, cập nhật tier/thủ môn, xuất Excel và cấu hình PayOS.\n    ",
+    "contact": {
+      "name": "CSE HitDad Tech Team",
+      "email": "admin@cse-hitdad.internal"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://cse-punchdad-api.onrender.com",
+      "description": "Production Server (Render Cloud)"
+    },
+    {
+      "url": "http://localhost:5001",
+      "description": "Local Development Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "User",
+      "description": "Quản lý thành viên, hồ sơ cá nhân, avatar, QR ngân hàng và quy trình duyệt thành viên"
+    },
+    {
+      "name": "Payment",
+      "description": "Quản lý tiền sân, đối soát thanh toán PayOS VietQR và webhook giao dịch"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Nhập JWT access token có dạng: `Bearer <token>`"
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Access token required hoặc thông báo lỗi cụ thể"
+          }
+        }
+      },
+      "UserMember": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "c3b5d2e1-4567-4890-abcd-123456789abc"
+          },
+          "username": {
+            "type": "string",
+            "example": "nguyenvanan"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "example": "an.nguyen@example.com",
+            "description": "Chỉ hiển thị đối với tài khoản Admin"
+          },
+          "displayName": {
+            "type": "string",
+            "example": "Nguyễn Văn An"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "MEMBER"
+            ],
+            "example": "MEMBER"
+          },
+          "tier": {
+            "type": "string",
+            "nullable": true,
+            "example": "B",
+            "description": "Phân loại trình độ đá bóng (A, B, C, D)"
+          },
+          "isGoalkeeper": {
+            "type": "boolean",
+            "example": false
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "0901234567"
+          },
+          "avatar": {
+            "type": "string",
+            "nullable": true,
+            "example": "data:image/png;base64,..."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-01-15T08:30:00.000Z"
+          },
+          "_count": {
+            "type": "object",
+            "properties": {
+              "votes": {
+                "type": "integer",
+                "example": 12,
+                "description": "Số buổi đá bóng COMPLETED mà user đã check-in tham gia"
+              }
+            }
+          }
+        }
+      },
+      "MembershipRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "e7f1b2c3-1122-3344-5566-778899aabbcc"
+          },
+          "username": {
+            "type": "string",
+            "example": "tranvanbinh"
+          },
+          "displayName": {
+            "type": "string",
+            "example": "Trần Văn Bình"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "binh.tran@example.com"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "0912345678"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-01T10:00:00.000Z"
+          },
+          "membershipStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING"
+            ],
+            "example": "PENDING"
+          }
+        }
+      },
+      "ReviewMembershipBody": {
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ],
+            "example": "APPROVED",
+            "description": "Quyết định phê duyệt hoặc từ chối đơn gia nhập"
+          }
+        }
+      },
+      "UpdateTierBody": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "nullable": true,
+            "example": "A",
+            "description": "Hạng trình độ kỹ thuật (A/B/C/D...) hoặc null để gỡ phân hạng"
+          }
+        }
+      },
+      "UpdateGoalkeeperBody": {
+        "type": "object",
+        "required": [
+          "isGoalkeeper"
+        ],
+        "properties": {
+          "isGoalkeeper": {
+            "type": "boolean",
+            "example": true,
+            "description": "Đánh dấu thành viên có chuyên môn bắt gôn (Thủ môn)"
+          }
+        }
+      },
+      "UpdateProfileBody": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "example": "Nguyễn Văn An (An Pro)",
+            "description": "Tên hiển thị (tối đa 50 ký tự)"
+          },
+          "phone": {
+            "type": "string",
+            "example": "0901234567",
+            "description": "Số điện thoại Việt Nam hợp lệ (10 chữ số)"
+          },
+          "bankInfo": {
+            "type": "string",
+            "example": "MBBank - 0987654321 - NGUYEN VAN AN",
+            "description": "Thông tin tài khoản ngân hàng"
+          },
+          "isGoalkeeper": {
+            "type": "boolean",
+            "example": false
+          }
+        }
+      },
+      "ChangePasswordBody": {
+        "type": "object",
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "format": "password",
+            "example": "OldPassword@123"
+          },
+          "newPassword": {
+            "type": "string",
+            "format": "password",
+            "example": "NewSecretPass@456",
+            "description": "Tối thiểu 6 ký tự"
+          }
+        }
+      },
+      "UploadAvatarBody": {
+        "type": "object",
+        "required": [
+          "avatar"
+        ],
+        "properties": {
+          "avatar": {
+            "type": "string",
+            "example": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+            "description": "Dữ liệu ảnh dạng Base64 data URI (PNG, JPEG, WebP, tối đa 2MB)"
+          }
+        }
+      },
+      "UploadQRCodeBody": {
+        "type": "object",
+        "required": [
+          "qrCodeImage"
+        ],
+        "properties": {
+          "qrCodeImage": {
+            "type": "string",
+            "example": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+            "description": "Ảnh mã QR ngân hàng Base64 (PNG, JPEG, WebP, tối đa 2MB)"
+          }
+        }
+      },
+      "PaymentItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "p1234567-89ab-cdef-0123-456789abcdef"
+          },
+          "amount": {
+            "type": "number",
+            "example": 50000,
+            "description": "Số tiền sân cần nộp (VND)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "PAID",
+              "CONFIRMED"
+            ],
+            "example": "CONFIRMED"
+          },
+          "orderCode": {
+            "type": "integer",
+            "nullable": true,
+            "example": 1712345678901,
+            "description": "Mã đơn hàng số sinh bởi PayOS"
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "nullable": true,
+            "example": "https://pay.payos.vn/web/..."
+          },
+          "paymentLinkId": {
+            "type": "string",
+            "nullable": true,
+            "example": "link_987654"
+          },
+          "accountNumber": {
+            "type": "string",
+            "nullable": true,
+            "example": "102873491823"
+          },
+          "accountName": {
+            "type": "string",
+            "nullable": true,
+            "example": "NGUYEN HOANG PHUC"
+          },
+          "bin": {
+            "type": "string",
+            "nullable": true,
+            "example": "970422",
+            "description": "Mã ngân hàng (BIN)"
+          },
+          "qrCode": {
+            "type": "string",
+            "nullable": true,
+            "example": "00020101021238540010A00000072701240006970422..."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "CSE Nguyen Van An"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-03T10:15:00.000Z"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-11-03T10:16:00.000Z"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "s1234567-89ab-cdef-0123-456789abcdef"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "c3b5d2e1-4567-4890-abcd-123456789abc"
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "example": "c3b5d2e1-4567-4890-abcd-123456789abc"
+              },
+              "displayName": {
+                "type": "string",
+                "example": "Nguyễn Văn An"
+              },
+              "avatar": {
+                "type": "string",
+                "nullable": true,
+                "example": "data:image/png;base64,..."
+              }
+            }
+          }
+        }
+      },
+      "PayOSLinkResponse": {
+        "type": "object",
+        "properties": {
+          "payment": {
+            "$ref": "#/components/schemas/PaymentItem"
+          },
+          "orderCode": {
+            "type": "integer",
+            "example": 1712345678901
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "example": "https://pay.payos.vn/web/e9b47..."
+          },
+          "qrCode": {
+            "type": "string",
+            "example": "00020101021238540010A00000072701240006970422..."
+          },
+          "amount": {
+            "type": "number",
+            "example": 50000
+          },
+          "description": {
+            "type": "string",
+            "example": "CSE Nguyen Van An"
+          },
+          "accountName": {
+            "type": "string",
+            "example": "NGUYEN HOANG PHUC"
+          },
+          "accountNumber": {
+            "type": "string",
+            "example": "102873491823"
+          },
+          "bin": {
+            "type": "string",
+            "example": "970422"
+          }
+        }
+      },
+      "PayOSWebhookBody": {
+        "type": "object",
+        "required": [
+          "code",
+          "desc",
+          "data",
+          "signature"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "00",
+            "description": "Mã trạng thái PayOS (\"00\" nghĩa là giao dịch thành công)"
+          },
+          "desc": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "orderCode": {
+                "type": "integer",
+                "example": 1712345678901
+              },
+              "amount": {
+                "type": "number",
+                "example": 50000
+              },
+              "description": {
+                "type": "string",
+                "example": "CSE Nguyen Van An"
+              },
+              "accountNumber": {
+                "type": "string",
+                "example": "102873491823"
+              },
+              "reference": {
+                "type": "string",
+                "example": "FT261103001"
+              },
+              "transactionDateTime": {
+                "type": "string",
+                "example": "2026-11-03 16:30:00"
+              },
+              "paymentLinkId": {
+                "type": "string",
+                "example": "link_987654"
+              },
+              "code": {
+                "type": "string",
+                "example": "00"
+              },
+              "desc": {
+                "type": "string",
+                "example": "success"
+              }
+            }
+          },
+          "signature": {
+            "type": "string",
+            "example": "9c5f87a32b6e7d91...",
+            "description": "Chữ ký số HMAC-SHA256 để máy chủ kiểm tra tính toàn vẹn dữ liệu từ PayOS"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/users/members": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Lấy danh sách tất cả thành viên CLB",
+        "description": "Trả về danh sách thành viên đã được phê duyệt (`membershipStatus = APPROVED`). Nếu người gọi là ADMIN, thông tin `email` sẽ được trả về đầy đủ; nếu là MEMBER thông thường, `email` sẽ bị ẩn.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Danh sách thành viên",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserMember"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc token không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tài khoản chưa được duyệt gia nhập CLB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/export-excel": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Xuất danh sách thành viên ra file Excel (.xlsx)",
+        "description": "Chỉ dành cho Ban Cán Sự (ADMIN). Tạo và tải về file bảng tính Excel gồm 2 sheet: Thành viên chính thức và Đơn đăng ký đang chờ duyệt.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tải về file Excel (.xlsx)",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ Ban Cán Sự (Admin) mới có quyền xuất file danh sách",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/membership-requests": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Danh sách đơn đăng ký gia nhập CLB chờ duyệt",
+        "description": "Chỉ dành cho ADMIN. Liệt kê toàn bộ tài khoản có `membershipStatus = PENDING` và `role = MEMBER` theo thứ tự đăng ký sớm nhất.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Danh sách đơn chờ duyệt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requests": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MembershipRequest"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ Admin mới có quyền truy cập",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/membership-requests/count": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Đếm số lượng đơn gia nhập CLB đang chờ duyệt",
+        "description": "Chỉ dành cho ADMIN. Trả về số lượng đơn đăng ký đang chờ duyệt để hiển thị badge số lượng thông báo.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Số lượng đơn chờ duyệt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "example": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Yêu cầu quyền Admin"
+          }
+        }
+      }
+    },
+    "/api/users/membership-requests/{userId}": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Phê duyệt hoặc từ chối đơn gia nhập CLB",
+        "description": "Chỉ dành cho ADMIN. Quyết định duyệt (`APPROVED`) đưa tài khoản vào CLB hoặc từ chối (`REJECTED`). Thao tác nguyên tử, lưu vết thời gian và người duyệt.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "ID người dùng đang chờ duyệt (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewMembershipBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Xử lý đơn thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Đã duyệt thành viên vào CLB"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Quyết định duyệt không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Yêu cầu quyền Admin"
+          },
+          "409": {
+            "description": "Yêu cầu không còn chờ duyệt hoặc không tồn tại",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{userId}/tier": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Cập nhật phân hạng trình độ (Tier) của thành viên",
+        "description": "Chỉ dành cho ADMIN. Thiết lập xếp loại trình độ chuyên môn đá bóng (ví dụ: A, B, C, D) phục vụ việc thuật toán tự động chia 2 đội cân bằng trình độ.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "ID thành viên (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTierBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật tier thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Cập nhật tier thành công"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Yêu cầu quyền Admin"
+          },
+          "404": {
+            "description": "Không tìm thấy người dùng"
+          }
+        }
+      }
+    },
+    "/api/users/{userId}/goalkeeper": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Cập nhật vai trò thủ môn cho thành viên",
+        "description": "Chỉ dành cho ADMIN. Đánh dấu hoặc bỏ đánh dấu thành viên là thủ môn của CLB.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGoalkeeperBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật vai trò thủ môn thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Cập nhật vai trò thủ môn thành công"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "isGoalkeeper": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Yêu cầu quyền Admin"
+          },
+          "404": {
+            "description": "Không tìm thấy người dùng"
+          }
+        }
+      }
+    },
+    "/api/users/profile": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Cập nhật thông tin hồ sơ cá nhân",
+        "description": "Người dùng cập nhật tên hiển thị (bắt buộc, tối đa 50 ký tự), số điện thoại VN, thông tin ngân hàng và vị trí thủ môn.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Cập nhật thông tin thành công"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "phone": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "bankInfo": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "avatar": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "isGoalkeeper": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Tên hiển thị trống, quá 50 ký tự hoặc số điện thoại không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          }
+        }
+      }
+    },
+    "/api/users/change-password": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Đổi mật khẩu tài khoản",
+        "description": "Xác thực mật khẩu cũ và băm mật khẩu mới với bcrypt (salt 12 rounds). Tự động tăng `authVersion` nhằm lập tức vô hiệu hoá toàn bộ token cũ trên các thiết bị khác.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Đổi mật khẩu thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Đổi mật khẩu thành công"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mật khẩu hiện tại sai hoặc mật khẩu mới dưới 6 ký tự / trùng mật khẩu cũ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "409": {
+            "description": "Mật khẩu vừa bị thay đổi"
+          }
+        }
+      }
+    },
+    "/api/users/avatar": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Tải lên ảnh đại diện (Base64)",
+        "description": "Tải lên ảnh avatar cá nhân dạng Data URI Base64. Hỗ trợ PNG, JPEG, WebP, giới hạn kích thước tối đa 2MB.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadAvatarBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật avatar thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Cập nhật ảnh đại diện thành công"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ảnh trống, định dạng không được hỗ trợ hoặc vượt quá 2MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Xóa ảnh đại diện",
+        "description": "Xóa ảnh avatar cá nhân của tài khoản hiện tại.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Xóa avatar thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Xóa ảnh đại diện thành công"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          }
+        }
+      }
+    },
+    "/api/users/qr-code": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Tải lên mã QR thanh toán cá nhân (Base64)",
+        "description": "Tải lên mã QR ngân hàng cá nhân dưới dạng Data URI Base64 (PNG, JPEG, WebP, tối đa 2MB) để các thành viên khác quét chuyển tiền khi cần.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadQRCodeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload mã QR thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Upload QR code thành công"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ảnh không hợp lệ hoặc quá 2MB"
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Xóa mã QR thanh toán cá nhân",
+        "description": "Xóa mã QR chuyển khoản cá nhân của tài khoản hiện tại.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Xóa QR code thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Xóa QR code thành công"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          }
+        }
+      }
+    },
+    "/api/users/{id}/qr-code": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Lấy mã QR thanh toán của một thành viên",
+        "description": "Lấy mã QR ngân hàng của một thành viên theo ID để thực hiện chuyển khoản tiền sân.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID người dùng (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thông tin mã QR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "qrCodeImage": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "404": {
+            "description": "Không tìm thấy người dùng"
+          }
+        }
+      }
+    },
+    "/api/users/{userId}": {
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Xóa thành viên khỏi CLB",
+        "description": "Chỉ dành cho ADMIN. Xóa vĩnh viễn thành viên khỏi cơ sở dữ liệu cùng các votes, payments liên quan. Không cho phép Admin tự xóa chính mình hoặc xóa Admin khác.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Đã xóa thành viên",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Đã xóa thành viên Nguyễn Văn An"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Không thể tự xóa chính mình"
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Không thể xóa tài khoản Admin"
+          },
+          "404": {
+            "description": "Không tìm thấy người dùng"
+          }
+        }
+      }
+    },
+    "/api/payments/session/{sessionId}": {
+      "get": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Lấy danh sách các khoản thanh toán của buổi đấu",
+        "description": "Lấy toàn bộ danh sách tiền sân của trận đấu (`sessionId`), thông tin người ứng tiền (Payer) và bảng tổng kết các trạng thái (PENDING, PAID, CONFIRMED). Tự động đối soát realtime với PayOS cho các giao dịch PENDING có orderCode.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "ID buổi đấu (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Chi tiết các khoản thanh toán và tổng kết",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "totalCost": {
+                          "type": "number",
+                          "example": 500000
+                        },
+                        "status": {
+                          "type": "string",
+                          "example": "BOOKED"
+                        },
+                        "payer": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "displayName": {
+                              "type": "string",
+                              "example": "Nguyễn Hoàng Phúc"
+                            },
+                            "bankInfo": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "phone": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "avatar": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentItem"
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalCost": {
+                          "type": "number",
+                          "example": 500000
+                        },
+                        "pending": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "paid": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "confirmed": {
+                          "type": "integer",
+                          "example": 7
+                        },
+                        "total": {
+                          "type": "integer",
+                          "example": 10
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "404": {
+            "description": "Session không tồn tại"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/mark-paid": {
+      "put": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Đánh dấu đã chuyển tiền mặt / thủ công",
+        "description": "Người tham gia tự đánh dấu mình đã chuyển khoản hoặc đưa tiền mặt cho thủ quỹ (trạng thái chuyển sang `PAID`). Chỉ chính chủ sở hữu khoản thanh toán mới được thao tác.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Payment ID (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Đã đánh dấu đã chuyển tiền",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Payment marked as paid"
+                    },
+                    "payment": {
+                      "$ref": "#/components/schemas/PaymentItem"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Chỉ được phép đánh dấu khoản thanh toán của chính mình"
+          },
+          "404": {
+            "description": "Không tìm thấy khoản thanh toán"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/confirm": {
+      "put": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Xác nhận đã nhận được tiền sân",
+        "description": "Chỉ dành cho người ứng tiền của session (Payer) hoặc ADMIN. Chuyển trạng thái khoản thanh toán sang `CONFIRMED`. Nếu toàn bộ người tham gia đều đã hoàn tất nộp tiền, session sẽ tự động chuyển thành `COMPLETED`.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Payment ID (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Xác nhận đã nhận tiền thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Payment confirmed! All payments completed - session marked as COMPLETED"
+                    },
+                    "payment": {
+                      "$ref": "#/components/schemas/PaymentItem"
+                    },
+                    "sessionCompleted": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Chỉ Payer của buổi đấu hoặc Admin mới có quyền xác nhận"
+          },
+          "404": {
+            "description": "Không tìm thấy khoản thanh toán"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/payos-link": {
+      "post": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Tạo link thanh toán PayOS và mã VietQR động",
+        "description": "Tạo liên kết thanh toán trực tuyến qua cổng PayOS và sinh chuỗi mã VietQR động có sẵn số tiền và nội dung chuyển khoản tự động. Hệ thống tự động tái sử dụng đơn hàng nếu đang PENDING nhằm chống spam/DDoS.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Payment ID (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Khởi tạo link thanh toán PayOS thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayOSLinkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Khoản thanh toán đã hoàn tất hoặc lỗi từ PayOS Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Không có quyền thanh toán cho khoản này"
+          },
+          "404": {
+            "description": "Không tìm thấy khoản thanh toán"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/payos-status": {
+      "get": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Kiểm tra trạng thái thanh toán PayOS theo thời gian thực (Polling)",
+        "description": "Cho phép Client polling liên tục kiểm tra trạng thái thanh toán từ PayOS Gateway. Nếu phát hiện giao dịch đã được thanh toán, hệ thống tự động cập nhật `CONFIRMED` vào DB và tự hoàn tất session.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Payment ID (UUID)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trạng thái thanh toán hiện tại",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "PAID",
+                        "CONFIRMED"
+                      ],
+                      "example": "CONFIRMED"
+                    },
+                    "payosStatus": {
+                      "type": "string",
+                      "nullable": true,
+                      "example": "PAID"
+                    },
+                    "payment": {
+                      "$ref": "#/components/schemas/PaymentItem"
+                    },
+                    "isPaid": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "404": {
+            "description": "Không tìm thấy khoản thanh toán"
+          }
+        }
+      }
+    },
+    "/api/payments/payos-confirm-webhook": {
+      "post": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Đăng ký và xác thực Webhook URL với PayOS",
+        "description": "Chỉ dành cho ADMIN. Cấu hình endpoint Webhook trên hệ thống PayOS để nhận callback khi có giao dịch chuyển khoản thành công.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "webhookUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://cse-punchdad-api.onrender.com/api/payments/payos-webhook"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Đăng ký webhook thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Đăng ký Webhook với PayOS thành công"
+                    },
+                    "result": {
+                      "type": "object"
+                    },
+                    "webhookUrl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Lỗi cấu hình từ PayOS"
+          },
+          "401": {
+            "description": "Chưa xác thực"
+          },
+          "403": {
+            "description": "Chỉ Admin mới có quyền cấu hình Webhook"
+          }
+        }
+      }
+    },
+    "/api/payments/payos-webhook": {
+      "post": {
+        "tags": [
+          "Payment"
+        ],
+        "summary": "Webhook nhận thông báo giao dịch thành công từ máy chủ PayOS",
+        "description": "Endpoint công khai (Public) dành riêng cho cổng PayOS gửi kết quả thanh toán. Bảo mật bằng xác thực chữ ký điện tử HMAC-SHA256 (checksum). Khi mã kết quả `code === \"00\"`, hệ thống tự động cập nhật payment sang `CONFIRMED` và hoàn tất session nếu đã đủ tiền.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayOSWebhookBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook đã được ghi nhận và xử lý",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Webhook processed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Chữ ký webhook không hợp lệ (Signature verification failed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
